@@ -1,17 +1,17 @@
 # WiFi Sync for Obsidian
 
-Sync your Obsidian vault from iPhone/iPad to Mac over your local WiFi network — no cloud required.
+Sync your Obsidian vault from iPhone/iPad/Android to Mac over your local WiFi network — no cloud required.
 
 Two plugins work together:
 - **Receiver** — runs on your Mac, starts an HTTP server inside Obsidian
-- **Sender** — runs on your iPhone/iPad, pushes files to the receiver on demand
+- **Sender** — runs on your iPhone, iPad, or Android device, pushes files to the receiver on demand
 
 ---
 
 ## Prerequisites
 
 - [Bun](https://bun.sh) (JavaScript runtime for building): `curl -fsSL https://bun.sh/install | bash`
-- Obsidian installed on both Mac and iOS
+- Obsidian installed on both Mac and your mobile device
 - Both devices on the same WiFi network
 
 ---
@@ -19,7 +19,7 @@ Two plugins work together:
 ## Build
 
 ```bash
-git clone <this repo>
+git clone https://github.com/JayYuNZ/obsidian-wifi-sync
 cd obsidian-wifi-sync
 
 bun install
@@ -67,6 +67,30 @@ Then in Obsidian on Mac:
 
 ---
 
+## Install Sender (Android)
+
+Android gives direct filesystem access, so copying files is simpler than iOS.
+
+**Option A — USB cable:**
+1. Connect your Android device to your Mac via USB
+2. On Android, select **File Transfer** mode when prompted
+3. Navigate to your Obsidian vault folder on the device (usually `Internal Storage/Documents/YourVault/` or `Internal Storage/Obsidian/YourVault/`)
+4. Inside `.obsidian/plugins/`, create a folder named `wifi-sync-sender`
+5. Copy `packages/sender/dist/main.js` and `packages/sender/manifest.json` into it
+
+**Option B — WiFi (using a file manager app):**
+1. Install a file manager with network support (e.g. Solid Explorer, MiXplorer)
+2. Transfer the two files to `.obsidian/plugins/wifi-sync-sender/` in your vault
+
+**Then in Obsidian on Android:**
+1. Settings → Community Plugins → enable "WiFi Sync Sender"
+2. Open plugin settings:
+   - **Receiver IP**: your Mac's local IP address (find it in Mac System Settings → WiFi → Details)
+   - **Port**: match the receiver's port
+   - **Auth Token**: paste the token you copied from the receiver
+
+---
+
 ## iOS Certificate Setup
 
 The receiver uses HTTPS with a self-signed certificate. On first sync, iOS will reject it unless you trust it:
@@ -77,6 +101,8 @@ The receiver uses HTTPS with a self-signed certificate. On first sync, iOS will 
 4. Go to iOS Settings → General → About → Certificate Trust Settings → enable the certificate
 
 After this, syncs will work without certificate warnings.
+
+> **Android:** Android handles self-signed certificates differently — you may be prompted to accept the certificate on first sync, or it may work automatically depending on your Android version. If you see a certificate error, check your Android version's instructions for installing a user certificate.
 
 ---
 
@@ -129,5 +155,11 @@ To test without a phone:
 **Certificate error on iOS**
 - Follow the iOS Certificate Setup steps above.
 
+**Certificate error on Android**
+- Go to Android Settings → Security → Install a certificate → CA certificate, then select the certificate file downloaded from the sender settings.
+
 **Files not appearing after sync**
 - Check the Sync Folder setting in the receiver — files may have landed in a subfolder.
+
+**Can't find vault folder on Android**
+- Obsidian on Android stores vaults in `Internal Storage/Documents/` by default. If you chose a custom location when setting up Obsidian, check there instead.

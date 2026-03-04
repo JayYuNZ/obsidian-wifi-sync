@@ -1,0 +1,13 @@
+{
+  "name": "obsidian-wifi-sync",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "build": "bun run build:receiver && bun run build:sender",
+    "build:receiver": "bun packages/receiver/esbuild.config.mjs",
+    "build:sender": "bun packages/sender/esbuild.config.mjs",
+    "dev:receiver": "bun packages/receiver/esbuild.config.mjs --watch",
+    "dev:sender": "bun packages/sender/esbuild.config.mjs --watch",
+    "typecheck": "bunx tsc -p packages/receiver/tsconfig.json --noEmit && bunx tsc -p packages/sender/tsconfig.json --noEmit"
+  }
+}

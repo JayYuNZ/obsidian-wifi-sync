@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Build output
+packages/receiver/dist/
+packages/sender/dist/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+
+# Claude Code local settings
+.claude/

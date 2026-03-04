@@ -1,0 +1,16 @@
+{
+  "name": "wifi-sync-sender",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "bun esbuild.config.mjs",
+    "dev": "bun esbuild.config.mjs --watch"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "esbuild": "^0.20.0",
+    "obsidian": "latest",
+    "typescript": "^5.0.0"
+  }
+}

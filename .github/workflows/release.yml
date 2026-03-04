@@ -1,0 +1,27 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build plugin
+        run: bun packages/wifi-sync/esbuild.config.mjs production
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            packages/wifi-sync/dist/main.js
+            packages/wifi-sync/manifest.json

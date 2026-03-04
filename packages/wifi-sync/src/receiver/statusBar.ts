@@ -9,8 +9,8 @@ export class StatusBarManager {
     this.el.setText("WiFi Sync: Idle");
   }
 
-  setListening(port: number) {
-    this.el.setText(`WiFi Sync: Listening :${port}`);
+  setListening() {
+    this.el.setText("WiFi Sync: On");
   }
 
   setSyncing(current: number, total: number) {

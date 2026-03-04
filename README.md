@@ -1,165 +1,112 @@
 # WiFi Sync for Obsidian
 
-Sync your Obsidian vault from iPhone/iPad/Android to Mac over your local WiFi network — no cloud required.
+Sync your Obsidian vault from iPhone/iPad/Android to Mac over your local WiFi network — no cloud, no subscription, no data leaving your network.
 
-Two plugins work together:
-- **Receiver** — runs on your Mac, starts an HTTP server inside Obsidian
-- **Sender** — runs on your iPhone, iPad, or Android device, pushes files to the receiver on demand
+One plugin runs on both platforms: it auto-detects whether it's running on desktop (Mac receiver) or mobile (iOS/Android sender) and activates the appropriate mode.
 
 ---
 
-## Prerequisites
+## Install
 
-- [Bun](https://bun.sh) (JavaScript runtime for building): `curl -fsSL https://bun.sh/install | bash`
-- Obsidian installed on both Mac and your mobile device
-- Both devices on the same WiFi network
+Install **WiFi Sync** from the Obsidian community plugin browser on both your Mac and your mobile device.
 
----
-
-## Build
-
-```bash
-git clone https://github.com/JayYuNZ/obsidian-wifi-sync
-cd obsidian-wifi-sync
-
-bun install
-bun run build
-```
-
-Output:
-- `packages/receiver/dist/main.js`
-- `packages/sender/dist/main.js`
-
-To type-check without building:
-```bash
-bun run typecheck
-```
+> Settings → Community Plugins → Browse → search "WiFi Sync"
 
 ---
 
-## Install Receiver (Mac)
+## Setup
 
-```bash
-VAULT_PATH="$HOME/Documents/MyVault" ./scripts/install-receiver.sh
-```
+### Step 1 — Mac (receiver)
 
-This copies the plugin into `.obsidian/plugins/wifi-sync-receiver/` inside your vault.
+1. Enable the plugin in Obsidian on your Mac
+2. Open plugin settings → click **Generate** next to Auth Token
+3. Click **Start** to start the server
+4. A QR code will appear in the settings panel
 
-Then in Obsidian on Mac:
-1. Settings → Community Plugins → enable "WiFi Sync Receiver"
-2. Open plugin settings → click **Generate Token** → copy the token
-3. Note the **port** (default: 8080)
+### Step 2 — Mobile (sender)
 
----
+1. Enable the plugin in Obsidian on your iPhone/iPad/Android
+2. Open the camera app and scan the QR code from Step 1
+3. Tap the link that appears — the plugin auto-configures itself
+4. Tap **Sync Now** in settings (or use the ribbon button)
 
-## Install Sender (iPhone/iPad)
-
-1. On your Mac, locate:
-   - `packages/sender/dist/main.js`
-   - `packages/sender/manifest.json`
-2. In the iOS vault's `.obsidian/plugins/` folder, create a subfolder named `wifi-sync-sender`
-3. Copy both files into that folder (use the Files app, Working Copy, or AirDrop)
-4. In Obsidian on iOS: Settings → Community Plugins → enable "WiFi Sync Sender"
-5. Open plugin settings:
-   - **Receiver IP**: your Mac's local IP address (find it in Mac System Settings → WiFi → Details)
-   - **Port**: match the receiver's port
-   - **Auth Token**: paste the token you copied from the receiver
-
----
-
-## Install Sender (Android)
-
-Android gives direct filesystem access, so copying files is simpler than iOS.
-
-**Option A — USB cable:**
-1. Connect your Android device to your Mac via USB
-2. On Android, select **File Transfer** mode when prompted
-3. Navigate to your Obsidian vault folder on the device (usually `Internal Storage/Documents/YourVault/` or `Internal Storage/Obsidian/YourVault/`)
-4. Inside `.obsidian/plugins/`, create a folder named `wifi-sync-sender`
-5. Copy `packages/sender/dist/main.js` and `packages/sender/manifest.json` into it
-
-**Option B — WiFi (using a file manager app):**
-1. Install a file manager with network support (e.g. Solid Explorer, MiXplorer)
-2. Transfer the two files to `.obsidian/plugins/wifi-sync-sender/` in your vault
-
-**Then in Obsidian on Android:**
-1. Settings → Community Plugins → enable "WiFi Sync Sender"
-2. Open plugin settings:
-   - **Receiver IP**: your Mac's local IP address (find it in Mac System Settings → WiFi → Details)
-   - **Port**: match the receiver's port
-   - **Auth Token**: paste the token you copied from the receiver
+That's it. Files from your mobile vault are pushed to the Mac vault.
 
 ---
 
 ## iOS Certificate Setup
 
-The receiver uses HTTPS with a self-signed certificate. On first sync, iOS will reject it unless you trust it:
+The receiver uses HTTPS with a self-signed certificate (required for iOS 17+). You need to trust this certificate on your iPhone once:
 
-1. In the sender settings, tap **Download Certificate**
-2. iOS will prompt you to install a profile — tap **Allow**
-3. Go to iOS Settings → General → VPN & Device Management → install the profile
-4. Go to iOS Settings → General → About → Certificate Trust Settings → enable the certificate
+1. In Mac plugin settings, click **Copy PEM to Clipboard**
+2. Paste into a text file, save it as `wifi-sync.pem`
+3. AirDrop the `.pem` file to your iPhone
+4. On iPhone: tap the file → Settings → General → VPN & Device Management → install it
+5. Go to Settings → General → About → Certificate Trust Settings → enable the certificate
 
-After this, syncs will work without certificate warnings.
+After this, syncs will work without interruption.
 
-> **Android:** Android handles self-signed certificates differently — you may be prompted to accept the certificate on first sync, or it may work automatically depending on your Android version. If you see a certificate error, check your Android version's instructions for installing a user certificate.
-
----
-
-## Local Testing (Two Vaults on Mac)
-
-To test without a phone:
-
-1. Install the receiver into one vault, start the server, note the port and token
-2. Install the sender into a second vault on the same Mac
-3. In sender settings: set Receiver IP to `127.0.0.1`, port and token to match
-4. Click **Sync Now** — files should appear in the receiver vault
-
----
-
-## Settings Reference
-
-### Receiver
-| Setting | Description |
-|---------|-------------|
-| Port | TCP port for the HTTP server (default: 8080) |
-| Auth Token | Bearer token — click Generate to create one |
-| Auto Start | Start the server when Obsidian loads |
-| Sync Folder | If set, received files go into this subfolder |
-| Conflict Strategy | `overwrite`, `keep-both`, or `skip` |
-
-### Sender
-| Setting | Description |
-|---------|-------------|
-| Receiver IP | Local IP of your Mac |
-| Port | Must match receiver port |
-| Auth Token | Must match receiver token |
-| Incremental Sync | Only send files changed since last sync |
-| Excluded Paths | Folders/files to skip (one per line) |
+> **Android:** Enable **HTTP Mode** in both Mac and mobile settings — Android handles plain HTTP fine and doesn't require certificate installation.
 
 ---
 
 ## Troubleshooting
 
 **"Unauthorized" error**
-- Token in sender doesn't match token in receiver — regenerate and re-paste.
+Token in sender doesn't match receiver — regenerate and re-scan the QR code.
 
 **Sync hangs / times out**
-- Check both devices are on the same WiFi network.
-- Check the receiver is running (status bar should show the port).
-- Check Mac firewall isn't blocking the port: System Settings → Network → Firewall → allow Obsidian.
+- Check both devices are on the same WiFi network
+- Verify the server is running (Mac status bar shows the port)
+- Mac firewall may be blocking the port: System Settings → Network → Firewall → allow Obsidian
 
-**413 error during sync**
-- A file exceeds the 10 MB payload limit. Exclude large binary files using the Excluded Paths setting.
+**413 error**
+A file exceeds the 10 MB limit. Add it to Excluded Paths in mobile settings.
 
 **Certificate error on iOS**
-- Follow the iOS Certificate Setup steps above.
+Follow the iOS Certificate Setup steps above.
 
-**Certificate error on Android**
-- Go to Android Settings → Security → Install a certificate → CA certificate, then select the certificate file downloaded from the sender settings.
+**Files land in wrong location**
+Check the **Sync Folder** setting on Mac — files go into that subfolder if set.
 
-**Files not appearing after sync**
-- Check the Sync Folder setting in the receiver — files may have landed in a subfolder.
+---
 
-**Can't find vault folder on Android**
-- Obsidian on Android stores vaults in `Internal Storage/Documents/` by default. If you chose a custom location when setting up Obsidian, check there instead.
+## Settings Reference
+
+### Mac (receiver)
+| Setting | Description |
+|---------|-------------|
+| Port | TCP port (default 27123) |
+| Auth Token | Bearer secret — click Generate |
+| Auto-start | Start server when Obsidian opens |
+| Sync Folder | Subfolder for received files (blank = vault root) |
+| Conflict Strategy | `skip`, `overwrite`, or `keep-both` |
+| HTTP Mode | Plain HTTP instead of HTTPS (Android-friendly) |
+
+### Mobile (sender)
+| Setting | Description |
+|---------|-------------|
+| Receiver IP | Auto-filled by QR scan, or enter manually |
+| Port | Must match receiver (default 27123) |
+| Auth Token | Auto-filled by QR scan, or paste from receiver |
+| Incremental Sync | Only send files changed since last sync |
+| Excluded Paths | Prefixes to skip (one per line) |
+| HTTP Mode | Must match receiver's HTTP Mode |
+| Subnet Prefix | For auto-discovery without QR (e.g. `192.168.1`) |
+
+---
+
+## Local Two-Vault Testing
+
+To test without a phone:
+
+1. Install the plugin into one vault on Mac, start server, generate token
+2. Install into a second vault on the same Mac
+3. In second vault's plugin settings: set Receiver IP to `127.0.0.1`, port and token to match
+4. Click **Sync Now** — files should appear in the first vault
+
+---
+
+## License
+
+MIT

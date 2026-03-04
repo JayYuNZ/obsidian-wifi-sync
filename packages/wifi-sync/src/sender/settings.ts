@@ -1,5 +1,5 @@
-import { App, PluginSettingTab, Setting, Notice } from "obsidian";
-import WiFiSyncSenderPlugin from "./main";
+import { App, Plugin, PluginSettingTab, Setting, Notice } from "obsidian";
+import type { SenderCore } from "./core";
 import { discoverReceiver } from "./discovery";
 
 export interface SenderSettings {
@@ -17,7 +17,7 @@ export const DEFAULT_SETTINGS: SenderSettings = {
   receiverIp: "",
   port: 27123,
   authToken: "",
-  httpMode: false,
+  httpMode: true,
   excludedPaths: [".obsidian/", ".trash/"],
   lastSyncTimestamp: 0,
   incrementalSync: false,
@@ -25,14 +25,14 @@ export const DEFAULT_SETTINGS: SenderSettings = {
 };
 
 export class SenderSettingTab extends PluginSettingTab {
-  constructor(app: App, private plugin: WiFiSyncSenderPlugin) {
+  constructor(app: App, plugin: Plugin, private core: SenderCore) {
     super(app, plugin);
   }
 
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: "WiFi Sync Sender" });
+    containerEl.createEl("h2", { text: "WiFi Sync" });
 
     // Connection
     containerEl.createEl("h3", { text: "Connection" });
@@ -43,10 +43,10 @@ export class SenderSettingTab extends PluginSettingTab {
       .addText((text) =>
         text
           .setPlaceholder("192.168.1.100")
-          .setValue(this.plugin.settings.receiverIp)
+          .setValue(this.core.settings.receiverIp)
           .onChange(async (value) => {
-            this.plugin.settings.receiverIp = value.trim();
-            await this.plugin.saveSettings();
+            this.core.settings.receiverIp = value.trim();
+            await this.core.saveSettings();
           })
       );
 
@@ -56,12 +56,12 @@ export class SenderSettingTab extends PluginSettingTab {
       .addText((text) =>
         text
           .setPlaceholder("27123")
-          .setValue(String(this.plugin.settings.port))
+          .setValue(String(this.core.settings.port))
           .onChange(async (value) => {
             const port = parseInt(value, 10);
             if (!isNaN(port) && port > 0 && port < 65536) {
-              this.plugin.settings.port = port;
-              await this.plugin.saveSettings();
+              this.core.settings.port = port;
+              await this.core.saveSettings();
             }
           })
       );
@@ -72,10 +72,10 @@ export class SenderSettingTab extends PluginSettingTab {
       .addText((text) => {
         text
           .setPlaceholder("64-char hex token")
-          .setValue(this.plugin.settings.authToken)
+          .setValue(this.core.settings.authToken)
           .onChange(async (value) => {
-            this.plugin.settings.authToken = value.trim();
-            await this.plugin.saveSettings();
+            this.core.settings.authToken = value.trim();
+            await this.core.saveSettings();
           });
         text.inputEl.style.fontFamily = "monospace";
         text.inputEl.style.width = "320px";
@@ -85,9 +85,9 @@ export class SenderSettingTab extends PluginSettingTab {
       .setName("HTTP Mode (no certificate)")
       .setDesc("Use plain HTTP instead of HTTPS. Must match the receiver's HTTP Mode setting.")
       .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.httpMode).onChange(async (value) => {
-          this.plugin.settings.httpMode = value;
-          await this.plugin.saveSettings();
+        toggle.setValue(this.core.settings.httpMode).onChange(async (value) => {
+          this.core.settings.httpMode = value;
+          await this.core.saveSettings();
         })
       );
 
@@ -98,15 +98,15 @@ export class SenderSettingTab extends PluginSettingTab {
       .setName("Incremental Sync")
       .setDesc("Only send files modified since the last successful sync (faster)")
       .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.incrementalSync).onChange(async (value) => {
-          this.plugin.settings.incrementalSync = value;
-          await this.plugin.saveSettings();
+        toggle.setValue(this.core.settings.incrementalSync).onChange(async (value) => {
+          this.core.settings.incrementalSync = value;
+          await this.core.saveSettings();
           this.display(); // refresh to show/hide timestamp
         })
       );
 
-    if (this.plugin.settings.incrementalSync && this.plugin.settings.lastSyncTimestamp > 0) {
-      const date = new Date(this.plugin.settings.lastSyncTimestamp);
+    if (this.core.settings.incrementalSync && this.core.settings.lastSyncTimestamp > 0) {
+      const date = new Date(this.core.settings.lastSyncTimestamp);
       containerEl.createEl("p", {
         text: `Last sync: ${date.toLocaleString()}`,
         cls: "setting-item-description",
@@ -117,8 +117,8 @@ export class SenderSettingTab extends PluginSettingTab {
         .setDesc("Force a full sync on the next run")
         .addButton((btn) =>
           btn.setButtonText("Reset").onClick(async () => {
-            this.plugin.settings.lastSyncTimestamp = 0;
-            await this.plugin.saveSettings();
+            this.core.settings.lastSyncTimestamp = 0;
+            await this.core.saveSettings();
             new Notice("Sync timestamp reset — next sync will be full");
             this.display();
           })
@@ -133,13 +133,13 @@ export class SenderSettingTab extends PluginSettingTab {
       .addTextArea((area) => {
         area
           .setPlaceholder(".obsidian/\n.trash/\nPrivate/")
-          .setValue(this.plugin.settings.excludedPaths.join("\n"))
+          .setValue(this.core.settings.excludedPaths.join("\n"))
           .onChange(async (value) => {
-            this.plugin.settings.excludedPaths = value
+            this.core.settings.excludedPaths = value
               .split("\n")
               .map((s) => s.trim())
               .filter(Boolean);
-            await this.plugin.saveSettings();
+            await this.core.saveSettings();
           });
         area.inputEl.rows = 4;
         area.inputEl.style.width = "100%";
@@ -157,15 +157,15 @@ export class SenderSettingTab extends PluginSettingTab {
       .addText((text) =>
         text
           .setPlaceholder("192.168.1")
-          .setValue(this.plugin.settings.subnetPrefix)
+          .setValue(this.core.settings.subnetPrefix)
           .onChange(async (value) => {
-            this.plugin.settings.subnetPrefix = value.trim();
-            await this.plugin.saveSettings();
+            this.core.settings.subnetPrefix = value.trim();
+            await this.core.saveSettings();
           })
       )
       .addButton((btn) => {
         btn.setButtonText("Discover").onClick(async () => {
-          if (!this.plugin.settings.subnetPrefix) {
+          if (!this.core.settings.subnetPrefix) {
             new Notice('Enter a subnet prefix first (e.g. "192.168.1")');
             return;
           }
@@ -173,13 +173,14 @@ export class SenderSettingTab extends PluginSettingTab {
           btn.setButtonText("Scanning…");
           try {
             const ip = await discoverReceiver(
-              this.plugin.settings.subnetPrefix,
-              this.plugin.settings.port,
-              this.plugin.settings.authToken
+              this.core.settings.subnetPrefix,
+              this.core.settings.port,
+              this.core.settings.authToken,
+              this.core.settings.httpMode
             );
             if (ip) {
-              this.plugin.settings.receiverIp = ip;
-              await this.plugin.saveSettings();
+              this.core.settings.receiverIp = ip;
+              await this.core.saveSettings();
               new Notice(`Found receiver at ${ip}`);
               this.display();
             } else {
@@ -201,7 +202,7 @@ export class SenderSettingTab extends PluginSettingTab {
       .setName("Test Connection")
       .setDesc("Verify the receiver is reachable with current settings")
       .addButton((btn) =>
-        btn.setButtonText("Test").onClick(() => this.plugin.checkConnection())
+        btn.setButtonText("Test").onClick(() => this.core.checkConnection())
       );
 
     new Setting(containerEl)
@@ -210,7 +211,7 @@ export class SenderSettingTab extends PluginSettingTab {
         btn
           .setButtonText("Sync Now")
           .setCta()
-          .onClick(() => this.plugin.triggerSync())
+          .onClick(() => this.core.triggerSync())
       );
   }
 }

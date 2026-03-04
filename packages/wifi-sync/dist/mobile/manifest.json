@@ -1,0 +1,10 @@
+{
+  "id": "wifi-sync",
+  "name": "WiFi Sync",
+  "version": "1.0.0",
+  "minAppVersion": "1.4.0",
+  "description": "Sync your mobile Obsidian vault to Mac over local WiFi — no cloud required.",
+  "author": "Jay Yu",
+  "authorUrl": "https://github.com/JayYuNZ",
+  "isDesktopOnly": false
+}

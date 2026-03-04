@@ -1,5 +1,5 @@
 import { App, TFile, normalizePath } from "obsidian";
-import * as http from "http";
+import type * as http from "http";
 import { validateBearerToken } from "@wifi-sync/shared/auth";
 import { sanitizePath } from "@wifi-sync/shared/paths";
 import { FileSyncPayload, FileSyncResult, ReceiverStatus } from "@wifi-sync/shared/types";
@@ -40,7 +40,8 @@ export function createRouteHandler(
   app: App,
   settings: ReceiverSettings,
   statusBar: StatusBarManager,
-  version: string
+  version: string,
+  consumePairingToken: (token: string) => boolean
 ) {
   const conflictResolver = new ConflictResolver(app, settings);
 
@@ -63,13 +64,25 @@ export function createRouteHandler(
       return;
     }
 
+    const url = req.url ?? "/";
+
+    // POST /pair — exchange one-time pairing token for real auth token (no auth required)
+    if (req.method === "POST" && url === "/pair") {
+      const body = await readBody(req);
+      const { pairingToken } = JSON.parse(body);
+      if (typeof pairingToken === "string" && consumePairingToken(pairingToken)) {
+        sendJSON(res, 200, { token: settings.authToken });
+      } else {
+        sendJSON(res, 401, { error: "Invalid or expired pairing token" });
+      }
+      return;
+    }
+
     // Auth check
     if (!validateBearerToken(req.headers["authorization"], settings.authToken)) {
       sendJSON(res, 401, { error: "Unauthorized" });
       return;
     }
-
-    const url = req.url ?? "/";
 
     try {
       // GET /status — health check and auth verification
@@ -117,7 +130,7 @@ export function createRouteHandler(
 
       // POST /sync/session/end
       if (req.method === "POST" && url === "/sync/session/end") {
-        statusBar.setListening(settings.port);
+        statusBar.setListening();
         sessionTotal = 0;
         sessionCurrent = 0;
         sendJSON(res, 200, { ok: true });

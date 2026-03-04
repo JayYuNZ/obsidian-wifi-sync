@@ -1,6 +1,6 @@
 import { App } from "obsidian";
-import * as https from "https";
-import * as http from "http";
+import type * as https from "https";
+import type * as http from "http";
 import { ReceiverSettings } from "./settings";
 import { StatusBarManager } from "./statusBar";
 import { createRouteHandler } from "./routes";
@@ -15,14 +15,15 @@ export interface CertData {
 }
 
 export class ReceiverServer {
-  private server: https.Server | null = null;
+  private server: https.Server | http.Server | null = null;
   private certData: CertData | null = null;
 
   constructor(
     private app: App,
     private settings: ReceiverSettings,
     private statusBar: StatusBarManager,
-    private version: string
+    private version: string,
+    private consumePairingToken: (token: string) => boolean
   ) {}
 
   updateSettings(settings: ReceiverSettings) {
@@ -101,13 +102,17 @@ export class ReceiverServer {
   }
 
   /**
-   * Starts the HTTPS server. Returns new CertData if a cert was generated,
-   * null if an existing cert from settings was used.
+   * Starts the HTTPS (or HTTP) server. Returns new CertData if a cert was generated,
+   * null if an existing cert from settings was used or HTTP mode is active.
    */
   async start(): Promise<CertData | null> {
     if (this.server) {
       await this.stop();
     }
+
+    // Inline requires so Node built-ins are only loaded on desktop at call time
+    const http = require("http") as typeof import("http");
+    const https = require("https") as typeof import("https");
 
     let newCert: CertData | null = null;
 
@@ -115,7 +120,8 @@ export class ReceiverServer {
       this.app,
       this.settings,
       this.statusBar,
-      this.version
+      this.version,
+      this.consumePairingToken
     );
 
     if (this.settings.httpMode) {

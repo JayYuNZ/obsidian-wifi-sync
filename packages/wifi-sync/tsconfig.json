@@ -4,8 +4,8 @@
     "baseUrl": ".",
     "types": ["node"],
     "paths": {
-      "@wifi-sync/shared/*": ["../shared/src/*"]
+      "@wifi-sync/shared/*": ["../../packages/shared/src/*"]
     }
   },
-  "include": ["src/**/*.ts", "../shared/src/**/*.ts"]
+  "include": ["src/**/*.ts", "../../packages/shared/src/**/*.ts"]
 }

@@ -1,7 +1,6 @@
-import { App, PluginSettingTab, Setting, Notice } from "obsidian";
-import WiFiSyncReceiverPlugin from "./main";
-import * as crypto from "crypto";
-import * as os from "os";
+import { App, Plugin, PluginSettingTab, Setting, Notice } from "obsidian";
+import type { ReceiverCore } from "./core";
+import QRCode from "qrcode";
 
 export type ConflictStrategy = "skip" | "overwrite" | "keep-both";
 
@@ -23,21 +22,25 @@ export const DEFAULT_SETTINGS: ReceiverSettings = {
   conflictStrategy: "skip",
   syncFolder: "",
   autoStart: true,
-  httpMode: false,
+  httpMode: true,
   certPem: "",
   keyPem: "",
   certFingerprint: "",
 };
 
 export class ReceiverSettingTab extends PluginSettingTab {
-  constructor(app: App, private plugin: WiFiSyncReceiverPlugin) {
+  constructor(app: App, plugin: Plugin, private core: ReceiverCore) {
     super(app, plugin);
   }
 
   display(): void {
+    // Inline requires so Node built-ins only load on desktop
+    const crypto = require("crypto") as typeof import("crypto");
+    const os = require("os") as typeof import("os");
+
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: "WiFi Sync Receiver" });
+    containerEl.createEl("h2", { text: "WiFi Sync" });
 
     // Show local IPs so user can copy to mobile settings
     const interfaces = os.networkInterfaces();
@@ -59,6 +62,33 @@ export class ReceiverSettingTab extends PluginSettingTab {
       ipEl.style.marginBottom = "1em";
     }
 
+    // QR code for mobile setup
+    if (this.core.server?.isRunning() && this.core.settings.authToken) {
+      containerEl.createEl("h3", { text: "Connect Mobile" });
+      containerEl.createEl("p", {
+        text: "Scan this QR code with your phone's camera app, then tap the link to auto-configure the sender plugin.",
+        cls: "setting-item-description",
+      });
+
+      const canvas = containerEl.createEl("canvas");
+      canvas.style.display = "block";
+      canvas.style.margin = "8px 0";
+
+      const primaryIp = ips[0] ?? "127.0.0.1";
+      // Generate a fresh one-time pairing token for each QR render
+      const pairingToken = crypto.randomBytes(16).toString("hex");
+      this.core.pairingToken = pairingToken;
+      const params = new URLSearchParams({
+        ip: primaryIp,
+        port: String(this.core.settings.port),
+        pairing_token: pairingToken,
+        http: this.core.settings.httpMode ? "1" : "0",
+      });
+      const uri = `obsidian://wifi-sync-connect?${params.toString()}`;
+
+      QRCode.toCanvas(canvas, uri, { width: 200, margin: 2 });
+    }
+
     // Port
     new Setting(containerEl)
       .setName("Port")
@@ -66,12 +96,12 @@ export class ReceiverSettingTab extends PluginSettingTab {
       .addText((text) =>
         text
           .setPlaceholder("27123")
-          .setValue(String(this.plugin.settings.port))
+          .setValue(String(this.core.settings.port))
           .onChange(async (value) => {
             const port = parseInt(value, 10);
             if (!isNaN(port) && port > 0 && port < 65536) {
-              this.plugin.settings.port = port;
-              await this.plugin.saveSettings();
+              this.core.settings.port = port;
+              await this.core.saveSettings();
             }
           })
       );
@@ -83,18 +113,18 @@ export class ReceiverSettingTab extends PluginSettingTab {
       .addText((text) => {
         text
           .setPlaceholder("Click Generate →")
-          .setValue(this.plugin.settings.authToken)
+          .setValue(this.core.settings.authToken)
           .onChange(async (value) => {
-            this.plugin.settings.authToken = value;
-            await this.plugin.saveSettings();
+            this.core.settings.authToken = value;
+            await this.core.saveSettings();
           });
         text.inputEl.style.fontFamily = "monospace";
         text.inputEl.style.width = "320px";
       })
       .addButton((btn) =>
         btn.setButtonText("Generate").onClick(async () => {
-          this.plugin.settings.authToken = crypto.randomBytes(32).toString("hex");
-          await this.plugin.saveSettings();
+          this.core.settings.authToken = crypto.randomBytes(32).toString("hex");
+          await this.core.saveSettings();
           this.display();
         })
       );
@@ -108,10 +138,10 @@ export class ReceiverSettingTab extends PluginSettingTab {
       .addText((text) =>
         text
           .setPlaceholder("Mobile")
-          .setValue(this.plugin.settings.syncFolder)
+          .setValue(this.core.settings.syncFolder)
           .onChange(async (value) => {
-            this.plugin.settings.syncFolder = value.trim();
-            await this.plugin.saveSettings();
+            this.core.settings.syncFolder = value.trim();
+            await this.core.saveSettings();
           })
       );
 
@@ -124,10 +154,10 @@ export class ReceiverSettingTab extends PluginSettingTab {
           .addOption("skip", "Skip — keep Mac version")
           .addOption("overwrite", "Overwrite — mobile wins")
           .addOption("keep-both", "Keep Both — save mobile copy with timestamp suffix")
-          .setValue(this.plugin.settings.conflictStrategy)
+          .setValue(this.core.settings.conflictStrategy)
           .onChange(async (value) => {
-            this.plugin.settings.conflictStrategy = value as ConflictStrategy;
-            await this.plugin.saveSettings();
+            this.core.settings.conflictStrategy = value as ConflictStrategy;
+            await this.core.saveSettings();
           })
       );
 
@@ -136,9 +166,9 @@ export class ReceiverSettingTab extends PluginSettingTab {
       .setName("Auto-start Server")
       .setDesc("Start listening automatically when Obsidian opens")
       .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.autoStart).onChange(async (value) => {
-          this.plugin.settings.autoStart = value;
-          await this.plugin.saveSettings();
+        toggle.setValue(this.core.settings.autoStart).onChange(async (value) => {
+          this.core.settings.autoStart = value;
+          await this.core.saveSettings();
         })
       );
 
@@ -146,15 +176,15 @@ export class ReceiverSettingTab extends PluginSettingTab {
     containerEl.createEl("h3", { text: "Server Controls" });
 
     new Setting(containerEl)
-      .setName(this.plugin.server?.isRunning() ? "Server is running" : "Server is stopped")
+      .setName(this.core.server?.isRunning() ? "Server is running" : "Server is stopped")
       .addButton((btn) =>
-        btn.setButtonText("Start").onClick(() => this.plugin.startServer())
+        btn.setButtonText("Start").onClick(() => this.core.startServer())
       )
       .addButton((btn) =>
         btn
           .setButtonText("Stop")
           .setCta()
-          .onClick(() => this.plugin.stopServer())
+          .onClick(() => this.core.stopServer())
       );
 
     // HTTP mode
@@ -162,15 +192,23 @@ export class ReceiverSettingTab extends PluginSettingTab {
       .setName("HTTP Mode (no certificate)")
       .setDesc("Use plain HTTP instead of HTTPS. Easier for local testing and Android. Not recommended for iOS.")
       .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.httpMode).onChange(async (value) => {
-          this.plugin.settings.httpMode = value;
-          await this.plugin.saveSettings();
-          if (this.plugin.server?.isRunning()) {
-            await this.plugin.startServer();
+        toggle.setValue(this.core.settings.httpMode).onChange(async (value) => {
+          this.core.settings.httpMode = value;
+          await this.core.saveSettings();
+          if (this.core.server?.isRunning()) {
+            await this.core.startServer();
           }
           this.display();
         })
       );
+
+    if (this.core.settings.httpMode) {
+      const warn = containerEl.createEl("p", {
+        text: "⚠ HTTP mode: data is unencrypted. Only use on a trusted home network.",
+        cls: "setting-item-description",
+      });
+      warn.style.color = "var(--color-red)";
+    }
 
     // TLS / Certificate
     containerEl.createEl("h3", { text: "TLS Certificate (iOS Setup)" });
@@ -182,7 +220,7 @@ export class ReceiverSettingTab extends PluginSettingTab {
     });
 
     const fingerprint =
-      this.plugin.server?.getCertFingerprint() || this.plugin.settings.certFingerprint;
+      this.core.server?.getCertFingerprint() || this.core.settings.certFingerprint;
 
     if (fingerprint) {
       new Setting(containerEl)
@@ -201,7 +239,7 @@ export class ReceiverSettingTab extends PluginSettingTab {
         .addButton((btn) =>
           btn.setButtonText("Copy PEM to Clipboard").onClick(async () => {
             const pem =
-              this.plugin.server?.getCertPem() || this.plugin.settings.certPem;
+              this.core.server?.getCertPem() || this.core.settings.certPem;
             await navigator.clipboard.writeText(pem);
             new Notice("Certificate PEM copied to clipboard");
           })
@@ -220,11 +258,11 @@ export class ReceiverSettingTab extends PluginSettingTab {
       )
       .addButton((btn) =>
         btn.setButtonText("Regenerate").onClick(async () => {
-          this.plugin.settings.certPem = "";
-          this.plugin.settings.keyPem = "";
-          this.plugin.settings.certFingerprint = "";
-          await this.plugin.saveSettings();
-          await this.plugin.startServer();
+          this.core.settings.certPem = "";
+          this.core.settings.keyPem = "";
+          this.core.settings.certFingerprint = "";
+          await this.core.saveSettings();
+          await this.core.startServer();
           this.display();
           new Notice("Certificate regenerated — re-trust on iOS required");
         })

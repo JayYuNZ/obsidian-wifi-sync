@@ -4,22 +4,45 @@
 
 ```
 packages/
-  receiver/   Obsidian plugin installed on Mac (desktop). Acts as HTTP server.
-  sender/     Obsidian plugin installed on iOS (mobile). Initiates sync.
+  wifi-sync/  Single community plugin (desktop receiver + mobile sender in one).
+    src/
+      main.ts           Platform detection entry point
+      receiver/         Desktop-only code (runs in Electron/Node.js)
+        core.ts         ReceiverCore class
+        server.ts       HTTPS/HTTP server
+        routes.ts       Request handling
+        settings.ts     ReceiverSettingTab
+        statusBar.ts
+        conflictResolver.ts
+      sender/           Mobile code (pure browser/Obsidian API)
+        core.ts         SenderCore class
+        syncEngine.ts
+        httpClient.ts
+        fileCollector.ts
+        discovery.ts
+        settings.ts     SenderSettingTab
+    manifest.json
+    esbuild.config.mjs
+    tsconfig.json
   shared/     Common types, auth, path utilities. Not a plugin — source only.
 scripts/
-  install-receiver.sh   Copies receiver dist into a vault's plugins folder.
+  install-receiver.sh   Copies wifi-sync dist into a vault's plugins folder.
 ```
+
+## Platform Detection
+
+`src/main.ts` uses `Platform.isDesktop` at runtime to load either `ReceiverCore` or `SenderCore` via dynamic import. esbuild bundles both, but Node built-ins in receiver code are loaded via inline `require()` inside functions — they never execute on mobile.
 
 ## Key Constraints
 
-### Sender (iOS/mobile)
+### Sender (iOS/mobile — SenderCore)
 - **Must use ONLY `requestUrl` from `obsidian`** for HTTP calls — never `fetch`, `XMLHttpRequest`, or Node's `http`. Mobile Obsidian does not provide Node.js.
 - No Node built-ins available. Pure browser/Obsidian API environment.
 
-### Receiver (Mac/desktop — runs in Electron)
+### Receiver (Mac/desktop — ReceiverCore, runs in Electron)
 - Uses Node built-ins: `http`, `https`, `crypto`, `os`. These are available via Electron.
-- **Mark Node built-ins as `external` in esbuild** — never bundle them. See `packages/receiver/esbuild.config.mjs`.
+- **Mark Node built-ins as `external` in esbuild** — never bundle them. See `packages/wifi-sync/esbuild.config.mjs`.
+- Node built-ins use `import type` at file level + inline `require()` inside function bodies so mobile never triggers them.
 - Uses `crypto.subtle` for hashing (Web Crypto API, available in both Electron and iOS).
 
 ## Shared Code Resolution
@@ -27,63 +50,63 @@ scripts/
 The `@wifi-sync/shared` import alias is resolved at build time by esbuild:
 
 ```
-@wifi-sync/shared/auth   → ../shared/src/auth.ts
-@wifi-sync/shared/types  → ../shared/src/types.ts
-@wifi-sync/shared/paths  → ../shared/src/paths.ts
+@wifi-sync/shared/auth   → packages/shared/src/auth.ts
+@wifi-sync/shared/types  → packages/shared/src/types.ts
+@wifi-sync/shared/paths  → packages/shared/src/paths.ts
 ```
 
-This avoids npm linking — the shared package is inlined into each plugin's bundle.
+This avoids npm linking — the shared package is inlined into the plugin bundle.
 
 ## Build Commands
 
 ```bash
-# Build both plugins
-npm run build
-
-# Build individually
-npm run build:receiver
-npm run build:sender
+# Build the plugin
+bun run build
+# or directly:
+~/.bun/bin/bun packages/wifi-sync/esbuild.config.mjs
 
 # Type-check without emitting (esbuild skips type errors)
-npm run typecheck
+bun run typecheck
+# or directly:
+~/.bun/bin/bunx tsc -p packages/wifi-sync/tsconfig.json --noEmit
 
 # Watch mode for development
-npm run dev:receiver
-npm run dev:sender
+bun run dev
 ```
 
-Output: `packages/receiver/dist/main.js` and `packages/sender/dist/main.js`
+Output: `packages/wifi-sync/dist/main.js`
 
-## Install Receiver
+## Install (Mac vault)
 
 ```bash
 VAULT_PATH="$HOME/path/to/YourVault" ./scripts/install-receiver.sh
 ```
 
-This copies `dist/main.js` + `manifest.json` into `.obsidian/plugins/wifi-sync-receiver/`.
+This copies `dist/main.js` + `manifest.json` into `.obsidian/plugins/wifi-sync/`.
 
-## Install Sender on Mobile
+## Install on Mobile
 
 Manually copy these two files into the mobile vault's plugin folder:
-- `packages/sender/dist/main.js`
-- `packages/sender/manifest.json`
+- `packages/wifi-sync/dist/main.js`
+- `packages/wifi-sync/manifest.json`
 
-Target: `.obsidian/plugins/wifi-sync-sender/`
+Target: `.obsidian/plugins/wifi-sync/`
 
-On iOS with the Obsidian mobile app, use the Files app or a tool like Working Copy.
+Or use the QR code in Mac settings — it generates an `obsidian://wifi-sync-connect?...` URI that auto-configures the mobile sender.
 
 ## Local Two-Vault Testing
 
-1. Install receiver into a Mac vault, enable the plugin, generate an auth token, note the port.
-2. Install sender into a second vault on the same Mac, enable it.
-3. In sender settings: set Receiver IP to `127.0.0.1`, set port and auth token to match receiver.
-4. Click "Sync Now" — files should appear in the receiver vault.
+1. Install into a Mac vault, enable the plugin, generate an auth token, start server.
+2. Install into a second vault on the same Mac, enable it.
+3. In sender settings (second vault): set Receiver IP to `127.0.0.1`, port and auth token to match.
+4. Click "Sync Now" — files should appear in the first vault.
 
 ## Architecture Notes
 
-- **Auth**: Bearer token (generated UUID, stored in plugin data). Validated on every request.
+- **Auth**: Bearer token (random hex, stored in plugin data). Validated on every request.
 - **Conflict strategies**: `overwrite`, `keep-both` (creates a `-mobile-<timestamp>` copy), `skip`.
 - **Incremental sync**: tracks `lastSyncTimestamp`; only sends files modified after last sync.
 - **Body size limit**: `readBody` in `routes.ts` caps payloads at 10 MB (returns 413 if exceeded).
 - **Request timeout**: `httpClient.ts` wraps `requestUrl` in a 30-second `Promise.race`.
 - **Hash failures**: `crypto.subtle.digest` calls are wrapped in try-catch; failed files are skipped with a console warning rather than crashing the sync.
+- **QR code**: receiver settings shows an `obsidian://wifi-sync-connect?ip=...&port=...&token=...&http=...` QR that auto-configures sender.

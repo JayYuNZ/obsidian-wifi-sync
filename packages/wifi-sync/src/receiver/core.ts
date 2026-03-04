@@ -3,42 +3,56 @@ import { ReceiverServer } from "./server";
 import { ReceiverSettingTab, ReceiverSettings, DEFAULT_SETTINGS } from "./settings";
 import { StatusBarManager } from "./statusBar";
 
-export default class WiFiSyncReceiverPlugin extends Plugin {
+export class ReceiverCore {
   settings!: ReceiverSettings;
   server!: ReceiverServer;
   statusBar!: StatusBarManager;
+  pairingToken: string | null = null;
+
+  constructor(private plugin: Plugin) {}
+
+  consumePairingToken(token: string): boolean {
+    if (this.pairingToken && this.pairingToken === token) {
+      this.pairingToken = null;
+      return true;
+    }
+    return false;
+  }
 
   async onload() {
     await this.loadSettings();
 
-    this.statusBar = new StatusBarManager(this.addStatusBarItem());
+    this.statusBar = new StatusBarManager(this.plugin.addStatusBarItem());
     this.statusBar.setIdle();
 
     this.server = new ReceiverServer(
-      this.app,
+      this.plugin.app,
       this.settings,
       this.statusBar,
-      this.manifest.version
+      this.plugin.manifest.version,
+      (token) => this.consumePairingToken(token)
     );
 
-    this.addCommand({
+    this.plugin.addCommand({
       id: "start-server",
       name: "Start WiFi Sync Server",
       callback: () => this.startServer(),
     });
 
-    this.addCommand({
+    this.plugin.addCommand({
       id: "stop-server",
       name: "Stop WiFi Sync Server",
       callback: () => this.stopServer(),
     });
 
-    this.addSettingTab(new ReceiverSettingTab(this.app, this));
+    this.plugin.addSettingTab(new ReceiverSettingTab(this.plugin.app, this.plugin, this));
 
     if (this.settings.autoStart) {
-      // Defer slightly so vault is fully loaded
-      this.app.workspace.onLayoutReady(() => this.startServer());
+      this.plugin.app.workspace.onLayoutReady(() => this.startServer());
     }
+
+    // Clean up server on plugin unload
+    this.plugin.register(() => this.server?.stop());
   }
 
   async startServer() {
@@ -53,8 +67,7 @@ export default class WiFiSyncReceiverPlugin extends Plugin {
         await this.saveSettings();
       }
 
-      this.statusBar.setListening(this.settings.port);
-      new Notice(`WiFi Sync: Listening on port ${this.settings.port}`);
+      this.statusBar.setListening();
     } catch (e: any) {
       this.statusBar.setError(e?.message ?? "unknown error");
       new Notice(`WiFi Sync: Failed to start — ${e?.message}`);
@@ -68,16 +81,12 @@ export default class WiFiSyncReceiverPlugin extends Plugin {
     new Notice("WiFi Sync: Server stopped");
   }
 
-  async onunload() {
-    await this.server.stop();
-  }
-
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.plugin.loadData());
   }
 
   async saveSettings() {
-    await this.saveData(this.settings);
+    await this.plugin.saveData(this.settings);
     this.server?.updateSettings(this.settings);
   }
 }

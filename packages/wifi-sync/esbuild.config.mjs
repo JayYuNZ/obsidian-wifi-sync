@@ -12,22 +12,39 @@ const context = await esbuild.context({
   entryPoints: [path.join(__dirname, "src/main.ts")],
   bundle: true,
   external: [
-    // Obsidian API — provided by the host (works on both desktop and mobile)
+    // Obsidian API — provided by the host
     "obsidian",
+    "electron",
     "@codemirror/*",
     "@lezer/*",
-    // No Node built-ins — sender must work on iOS where Node is unavailable
+    // Node built-ins — available via Electron on desktop, must NOT be bundled
+    "http",
+    "https",
+    "net",
+    "tls",
+    "os",
+    "crypto",
+    "fs",
+    "path",
+    "stream",
+    "buffer",
+    "util",
+    "events",
+    "zlib",
+    "url",
+    "querystring",
   ],
   alias: {
-    "@wifi-sync/shared": path.join(__dirname, "../shared/src"),
+    // Resolve workspace package to source files for bundling
+    "@wifi-sync/shared": path.join(__dirname, "../../packages/shared/src"),
   },
   format: "cjs",
   target: "es2018",
   logLevel: "info",
-  sourcemap: prod ? false : "inline",
+  sourcemap: false,
   treeShaking: true,
   outfile: path.join(__dirname, "dist/main.js"),
-  platform: "browser",
+  platform: "node",
 });
 
 if (watch) {

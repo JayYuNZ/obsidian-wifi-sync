@@ -14,7 +14,8 @@ const BATCH_SIZE = 20;
 export async function discoverReceiver(
   subnetPrefix: string,
   port: number,
-  authToken: string
+  authToken: string,
+  httpMode = false
 ): Promise<string | null> {
   const ips: string[] = [];
   for (let i = 1; i <= 254; i++) {
@@ -26,7 +27,8 @@ export async function discoverReceiver(
 
     const results = await Promise.allSettled(
       batch.map(async (ip) => {
-        const client = new HttpClient(`https://${ip}:${port}`, authToken);
+        const protocol = httpMode ? "http" : "https";
+        const client = new HttpClient(`${protocol}://${ip}:${port}`, authToken);
         const response = await client.get("/status");
         if (response.status === 200) {
           const status = response.json as ReceiverStatus;

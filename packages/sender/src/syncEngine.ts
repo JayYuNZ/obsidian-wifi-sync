@@ -20,7 +20,8 @@ export class SyncEngine {
   }
 
   private buildClient(): HttpClient {
-    const baseUrl = `https://${this.settings.receiverIp}:${this.settings.port}`;
+    const protocol = this.settings.httpMode ? "http" : "https";
+    const baseUrl = `${protocol}://${this.settings.receiverIp}:${this.settings.port}`;
     return new HttpClient(baseUrl, this.settings.authToken);
   }
 

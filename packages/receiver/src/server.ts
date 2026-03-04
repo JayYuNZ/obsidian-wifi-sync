@@ -111,17 +111,6 @@ export class ReceiverServer {
 
     let newCert: CertData | null = null;
 
-    if (this.settings.certPem && this.settings.keyPem) {
-      this.certData = {
-        cert: this.settings.certPem,
-        key: this.settings.keyPem,
-        fingerprint: this.settings.certFingerprint ?? "Unknown",
-      };
-    } else {
-      this.certData = await this.generateCert();
-      newCert = this.certData;
-    }
-
     const routeHandler = createRouteHandler(
       this.app,
       this.settings,
@@ -129,10 +118,24 @@ export class ReceiverServer {
       this.version
     );
 
-    this.server = https.createServer(
-      { cert: this.certData.cert, key: this.certData.key },
-      routeHandler
-    );
+    if (this.settings.httpMode) {
+      this.server = http.createServer(routeHandler);
+    } else {
+      if (this.settings.certPem && this.settings.keyPem) {
+        this.certData = {
+          cert: this.settings.certPem,
+          key: this.settings.keyPem,
+          fingerprint: this.settings.certFingerprint ?? "Unknown",
+        };
+      } else {
+        this.certData = await this.generateCert();
+        newCert = this.certData;
+      }
+      this.server = https.createServer(
+        { cert: this.certData!.cert, key: this.certData!.key },
+        routeHandler
+      );
+    }
 
     return new Promise<CertData | null>((resolve, reject) => {
       this.server!.listen(this.settings.port, "0.0.0.0", () => {

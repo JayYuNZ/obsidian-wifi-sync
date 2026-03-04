@@ -11,6 +11,7 @@ export interface ReceiverSettings {
   conflictStrategy: ConflictStrategy;
   syncFolder: string;
   autoStart: boolean;
+  httpMode: boolean;
   certPem: string;
   keyPem: string;
   certFingerprint: string;
@@ -22,6 +23,7 @@ export const DEFAULT_SETTINGS: ReceiverSettings = {
   conflictStrategy: "skip",
   syncFolder: "",
   autoStart: true,
+  httpMode: false,
   certPem: "",
   keyPem: "",
   certFingerprint: "",
@@ -153,6 +155,21 @@ export class ReceiverSettingTab extends PluginSettingTab {
           .setButtonText("Stop")
           .setCta()
           .onClick(() => this.plugin.stopServer())
+      );
+
+    // HTTP mode
+    new Setting(containerEl)
+      .setName("HTTP Mode (no certificate)")
+      .setDesc("Use plain HTTP instead of HTTPS. Easier for local testing and Android. Not recommended for iOS.")
+      .addToggle((toggle) =>
+        toggle.setValue(this.plugin.settings.httpMode).onChange(async (value) => {
+          this.plugin.settings.httpMode = value;
+          await this.plugin.saveSettings();
+          if (this.plugin.server?.isRunning()) {
+            await this.plugin.startServer();
+          }
+          this.display();
+        })
       );
 
     // TLS / Certificate

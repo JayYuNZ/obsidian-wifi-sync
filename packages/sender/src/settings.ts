@@ -6,6 +6,7 @@ export interface SenderSettings {
   receiverIp: string;
   port: number;
   authToken: string;
+  httpMode: boolean;
   excludedPaths: string[];
   lastSyncTimestamp: number;
   incrementalSync: boolean;
@@ -16,6 +17,7 @@ export const DEFAULT_SETTINGS: SenderSettings = {
   receiverIp: "",
   port: 27123,
   authToken: "",
+  httpMode: false,
   excludedPaths: [".obsidian/", ".trash/"],
   lastSyncTimestamp: 0,
   incrementalSync: false,
@@ -78,6 +80,16 @@ export class SenderSettingTab extends PluginSettingTab {
         text.inputEl.style.fontFamily = "monospace";
         text.inputEl.style.width = "320px";
       });
+
+    new Setting(containerEl)
+      .setName("HTTP Mode (no certificate)")
+      .setDesc("Use plain HTTP instead of HTTPS. Must match the receiver's HTTP Mode setting.")
+      .addToggle((toggle) =>
+        toggle.setValue(this.plugin.settings.httpMode).onChange(async (value) => {
+          this.plugin.settings.httpMode = value;
+          await this.plugin.saveSettings();
+        })
+      );
 
     // Sync options
     containerEl.createEl("h3", { text: "Sync Options" });

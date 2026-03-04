@@ -30,7 +30,7 @@ PLUGIN_DIR="$VAULT_PATH/.obsidian/plugins/wifi-sync-receiver"
 
 echo "==> Building receiver plugin..."
 cd "$REPO_ROOT"
-npm run build:receiver
+~/.bun/bin/bun run build:receiver
 
 echo "==> Installing to: $PLUGIN_DIR"
 mkdir -p "$PLUGIN_DIR"
